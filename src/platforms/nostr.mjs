@@ -12,13 +12,21 @@ import { logger } from '../utils/logger.mjs';
 let privateKey;
 let publicKey;
 
-// List of popular Nostr relays
+// List of reliable Nostr relays that accept direct messages (kind 4)
 const RELAYS = [
-  'wss://relay.primal.net',  // Added Primal relay
+  // Primary relays - confirmed working with direct messages
   'wss://relay.damus.io',
-  'wss://relay.nostr.info',
-  'wss://nostr.fmt.wiz.biz',
-  'wss://relay.snort.social'
+  'wss://relay.primal.net',
+  'wss://relay.nostr.band',
+  'wss://nos.lol',
+  'wss://nostr.mom',
+  'wss://nostr.oxtr.dev',
+  
+  // Additional relays to try
+  'wss://relay.snort.social',
+  'wss://nostr-pub.wellorder.net',
+  'wss://relay.current.fyi',
+  'wss://eden.nostr.land'
 ];
 
 export async function initialize() {
@@ -88,6 +96,11 @@ export async function findPotentialUsers(searchTerms) {
     // Open a new page with a viewport large enough
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
+    
+    // Add error handling for page navigation
+    page.on('error', err => {
+      logger.error(`Page error: ${err.message}`);
+    });
     
     // Set a user agent to appear more like a regular browser
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
@@ -220,8 +233,8 @@ export async function findPotentialUsers(searchTerms) {
         window.scrollTo(0, document.body.scrollHeight);
       });
       
-      // Wait for new content to load
-      await page.waitForTimeout(2000);
+      // Wait for new content to load using setTimeout instead of waitForTimeout
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Extract profiles again
       profileLinks = await extractProfileLinks();
@@ -420,12 +433,19 @@ export async function findPotentialUsers(searchTerms) {
     return processedUsers;
   } catch (error) {
     logger.error(`Error searching for Nostr users: ${error.message}`);
+    if (error.stack) {
+      logger.debug('Error stack trace:', error.stack);
+    }
     return [];
   } finally {
     // Make sure to close the browser
     if (browser) {
-      await browser.close();
-      logger.log('Browser closed');
+      try {
+        await browser.close();
+        logger.log('Browser closed');
+      } catch (closeError) {
+        logger.error(`Error closing browser: ${closeError.message}`);
+      }
     }
   }
 }
@@ -463,14 +483,83 @@ export async function messageUser(user, message) {
     const pool = new SimplePool();
     
     try {
-      // Publish the event to all relays
-      const pubs = pool.publish(RELAYS, event);
+      // Simplified approach to publishing to relays
+      logger.log('Connecting to relays...');
       
-      // Wait for at least one relay to confirm publication
-      const pub = await Promise.any(pubs);
-      logger.log(`\u2705 Message published successfully to ${pub}`);
+      // Use a more straightforward approach with SimplePool
+      // The publish method returns an array of promises, one for each relay
+      const pub = pool.publish(RELAYS, event);
+      
+      // Set up a timeout for the entire operation
+      const timeout = 15000; // 15 seconds
+      
+      // Create a promise that resolves after all relays have been tried
+      // or after the timeout, whichever comes first
+      const publishWithTimeout = Promise.race([
+        new Promise(resolve => {
+          // Track successful relays
+          const successfulRelays = [];
+          let failedRelays = 0;
+          
+          // Set up a listener for each relay result
+          RELAYS.forEach((relay, index) => {
+            // Check if we have a corresponding promise in the pub array
+            if (index < pub.length) {
+              // Add a success handler
+              pub[index].then(() => {
+                successfulRelays.push(relay);
+                logger.log(`Published to relay: ${relay}`);
+                
+                // If all relays have responded, resolve the main promise
+                if (successfulRelays.length + failedRelays === RELAYS.length) {
+                  resolve({ successfulRelays });
+                }
+              }).catch(error => {
+                failedRelays++;
+                // Provide more detailed error information
+                const errorMessage = error.message || 'Unknown error';
+                const errorDetails = error.stack ? `
+${error.stack}` : '';
+                logger.warn(`Failed to publish to relay ${relay}: ${errorMessage}${errorDetails}`);
+                
+                // If all relays have responded, resolve the main promise
+                if (successfulRelays.length + failedRelays === RELAYS.length) {
+                  resolve({ successfulRelays });
+                }
+              });
+            }
+          });
+        }),
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({ timedOut: true });
+          }, timeout);
+        })
+      ]);
+      
+      // Wait for the publish operation to complete or timeout
+      const result = await publishWithTimeout;
+      
+      if (result.timedOut) {
+        logger.warn('\u26a0\ufe0f Publish operation timed out after 15 seconds');
+        // Even if timed out, we might have had some successful relays
+        if (result.successfulRelays && result.successfulRelays.length > 0) {
+          logger.log(`Message was published to ${result.successfulRelays.length} relays before timeout: ${result.successfulRelays.join(', ')}`);
+          return { success: true, relays: result.successfulRelays };
+        }
+      } else if (result.successfulRelays && result.successfulRelays.length > 0) {
+        logger.log(`\u2705 Message published successfully to ${result.successfulRelays.length} relays: ${result.successfulRelays.join(', ')}`);
+        return { success: true, relays: result.successfulRelays };
+      } else {
+        logger.warn('\u26a0\ufe0f Failed to publish to any relays');
+      }
+      
+      // If we reached here with no successful relays, return failure
+      if (!result.successfulRelays || result.successfulRelays.length === 0) {
+        return { success: false, error: 'Failed to publish to any relays' };
+      }
     } catch (error) {
-      logger.warn('\u26a0\ufe0f Failed to publish to any relays:', error.message);
+      logger.warn(`\u26a0\ufe0f Failed to publish to any relays: ${error.message}`);
     } finally {
       // Close all connections
       pool.close(RELAYS);
