@@ -6,17 +6,23 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { setTimeout as wait } from 'timers/promises';
 import dayjs from 'dayjs';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load environment variables from .env file
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
+// Load message from config.json
 const config = JSON.parse(await fs.readFile(path.join(__dirname, '../config.json')));
 
 const r = new snoowrap({
   userAgent: 'networking-bot/1.0',
-  clientId: config.client_id,
-  clientSecret: config.client_secret,
-  username: config.username,
-  password: config.password
+  clientId: process.env.REDDIT_CLIENT_ID,
+  clientSecret: process.env.REDDIT_CLIENT_SECRET,
+  username: process.env.REDDIT_USERNAME,
+  password: process.env.REDDIT_PASSWORD
 });
 
 const messagedFile = path.join(__dirname, '../messaged.json');
