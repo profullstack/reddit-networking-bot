@@ -1,3 +1,26 @@
 {
-  "message": "Hey! I saw you're interested in networking — I help run a tech founder networking group, would you like to join?"
+  "platforms": {
+    "reddit": {
+      "enabled": true,
+      "message": "Hey! I saw you're interested in networking — I help run a tech founder networking group, would you like to join?"
+    },
+    "bluesky": {
+      "enabled": true,
+      "message": "Hey! I noticed you're interested in networking — I help run a tech founder networking group, would you like to join?"
+    },
+    "nostr": {
+      "enabled": true,
+      "message": "Hey! I saw your posts about networking — I help run a tech founder networking group, would you like to join?"
+    },
+    "x": {
+      "enabled": true,
+      "message": "Hey! I noticed your tweets about networking — I help run a tech founder networking group, would you like to join?"
+    }
+  },
+  "searchTerms": {
+    "reddit": ["looking for networking", "business networking", "tech founder"],
+    "bluesky": ["networking", "founder", "startup"],
+    "nostr": ["networking", "founder", "startup"],
+    "x": ["networking", "founder", "startup"]
+  }
 }

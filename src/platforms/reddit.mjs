@@ -1,0 +1,38 @@
+import snoowrap from 'snoowrap';
+import dayjs from 'dayjs';
+
+let r;
+
+export function initialize() {
+  r = new snoowrap({
+    userAgent: 'networking-bot/1.0',
+    clientId: process.env.REDDIT_CLIENT_ID,
+    clientSecret: process.env.REDDIT_CLIENT_SECRET,
+    username: process.env.REDDIT_USERNAME,
+    password: process.env.REDDIT_PASSWORD
+  });
+}
+
+export async function findPotentialUsers(searchTerms) {
+  const query = searchTerms.join(' OR ');
+  const searchResults = await r.search({
+    query,
+    sort: 'new',
+    time: 'day',
+    limit: 25
+  });
+
+  return searchResults
+    .filter(post => !post.author.name.toLowerCase().includes('bot'))
+    .map(post => post.author.name);
+}
+
+export async function messageUser(user, message) {
+  console.log(`[${dayjs().format('HH:mm')}] Messaging Reddit user: ${user}`);
+  await r.composeMessage({
+    to: user,
+    subject: 'Tech Founder Networking Group',
+    text: message
+  });
+  console.log(`✅ Messaged Reddit user ${user}`);
+}
