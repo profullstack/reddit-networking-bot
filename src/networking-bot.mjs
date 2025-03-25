@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { setTimeout as wait } from 'timers/promises';
 import dayjs from 'dayjs';
 import dotenv from 'dotenv';
+import { logger } from './utils/logger.mjs';
 
 // Import platform modules
 import * as reddit from './platforms/reddit.mjs';
@@ -37,20 +38,20 @@ const platforms = {
  * Initialize all enabled platforms
  */
 async function initializePlatforms() {
-  console.log('Initializing platforms...');
+  logger.log('Initializing platforms...');
   
   for (const [name, platform] of Object.entries(platforms)) {
     if (config.platforms[name]?.enabled) {
       try {
         await platform.initialize();
-        console.log(`✅ ${name} initialized`);
+        logger.log(`✅ ${name} initialized`);
       } catch (error) {
-        console.error(`❌ Failed to initialize ${name}: ${error.message}`);
+        logger.error(`❌ Failed to initialize ${name}: ${error.message}`);
         // Disable the platform if initialization fails
         config.platforms[name].enabled = false;
       }
     } else {
-      console.log(`⏭️ Skipping disabled platform: ${name}`);
+      logger.log(`⏭️ Skipping disabled platform: ${name}`);
     }
   }
 }
@@ -64,19 +65,19 @@ async function runPlatform(platformName) {
     return;
   }
   
-  console.log(`\n🔄 Running ${platformName} bot...`);
+  logger.log(`\n🔄 Running ${platformName} bot...`);
   const platform = platforms[platformName];
   const messaged = await loadMessagedUsers(platformName);
   
   try {
     const candidates = await platform.findPotentialUsers(config.searchTerms[platformName]);
-    console.log(`Found ${candidates.length} potential users on ${platformName}`);
+    logger.log(`Found ${candidates.length} potential users on ${platformName}`);
     
     const filtered = candidates.filter(user => !messaged.includes(user));
-    console.log(`${filtered.length} new candidates on ${platformName}`);
+    logger.log(`${filtered.length} new candidates on ${platformName}`);
     
     if (filtered.length === 0) {
-      console.log(`No new candidates found for ${platformName}.`);
+      logger.log(`No new candidates found for ${platformName}.`);
       return;
     }
     
@@ -85,7 +86,7 @@ async function runPlatform(platformName) {
     messaged.push(nextUser);
     await saveMessagedUsers(platformName, messaged);
   } catch (error) {
-    console.error(`Error running ${platformName} bot: ${error.message}`);
+    logger.error(`Error running ${platformName} bot: ${error.message}`);
   }
 }
 
@@ -93,7 +94,7 @@ async function runPlatform(platformName) {
  * Main function that runs all enabled platforms
  */
 async function main() {
-  console.log(`\n🤖 Starting networking bot at ${dayjs().format('YYYY-MM-DD HH:mm')}`);
+  logger.log(`\n🤖 Starting networking bot at ${dayjs().format('YYYY-MM-DD HH:mm')}`);
   
   // Migrate existing messaged.json to platform-specific files
   await migrateMessagedUsers();
@@ -108,10 +109,10 @@ async function main() {
     }
   }
   
-  console.log(`\n⏱️ Waiting 1 hour before next run...`);
+  logger.log(`\n⏱️ Waiting 1 hour before next run...`);
   await wait(1000 * 60 * 60);
   await main();
 }
 
 // Start the bot
-main().catch(err => console.error('Fatal error:', err));
+main().catch(err => logger.error('Fatal error:', err));

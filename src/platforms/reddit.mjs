@@ -1,5 +1,6 @@
 import snoowrap from 'snoowrap';
 import dayjs from 'dayjs';
+import { logger } from '../utils/logger.mjs';
 
 let r;
 
@@ -28,11 +29,16 @@ export async function findPotentialUsers(searchTerms) {
 }
 
 export async function messageUser(user, message) {
-  console.log(`[${dayjs().format('HH:mm')}] Messaging Reddit user: ${user}`);
-  await r.composeMessage({
-    to: user,
-    subject: 'Tech Founder Networking Group',
-    text: message
-  });
-  console.log(`✅ Messaged Reddit user ${user}`);
+  logger.log(`[${dayjs().format('HH:mm')}] Messaging Reddit user: ${user}`);
+  try {
+    await r.composeMessage({
+      to: user,
+      subject: 'Tech Founder Networking Group',
+      text: message
+    });
+    logger.log(`✅ Messaged Reddit user ${user}`);
+  } catch (error) {
+    logger.error(`Error messaging Reddit user ${user}: ${error.message}`);
+    throw error;
+  }
 }

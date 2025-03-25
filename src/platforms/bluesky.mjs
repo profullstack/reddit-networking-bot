@@ -1,5 +1,6 @@
 import { BskyAgent } from '@atproto/api';
 import dayjs from 'dayjs';
+import { logger } from '../utils/logger.mjs';
 
 let agent;
 
@@ -9,7 +10,7 @@ export async function initialize() {
     identifier: process.env.BLUESKY_IDENTIFIER,
     password: process.env.BLUESKY_PASSWORD
   });
-  console.log('Bluesky initialized');
+  logger.log('Bluesky initialized');
 }
 
 export async function findPotentialUsers(searchTerms) {
@@ -26,7 +27,7 @@ export async function findPotentialUsers(searchTerms) {
         }
       }
     } catch (error) {
-      console.error(`Error searching Bluesky for term "${term}": ${error.message}`);
+      logger.error(`Error searching Bluesky for term "${term}": ${error.message}`);
     }
   }
   
@@ -35,7 +36,7 @@ export async function findPotentialUsers(searchTerms) {
 }
 
 export async function messageUser(user, message) {
-  console.log(`[${dayjs().format('HH:mm')}] Messaging Bluesky user: ${user}`);
+  logger.log(`[${dayjs().format('HH:mm')}] Messaging Bluesky user: ${user}`);
   
   try {
     // Bluesky doesn't have direct messages yet, so we'll follow the user
@@ -46,7 +47,7 @@ export async function messageUser(user, message) {
     
     // Follow the user
     await agent.follow(profile.data.did);
-    console.log(`Followed Bluesky user ${user}`);
+    logger.log(`Followed Bluesky user ${user}`);
     
     // Find their most recent post
     const posts = await agent.getAuthorFeed({ actor: profile.data.did, limit: 1 });
@@ -69,17 +70,17 @@ export async function messageUser(user, message) {
         }
       });
       
-      console.log(`\u2705 Messaged Bluesky user ${user} via reply`);
+      logger.log(`\u2705 Messaged Bluesky user ${user} via reply`);
     } else {
       // If they have no posts, just make a new post mentioning them
       await agent.post({
         text: `@${user} ${message}`
       });
       
-      console.log(`\u2705 Messaged Bluesky user ${user} via mention`);
+      logger.log(`\u2705 Messaged Bluesky user ${user} via mention`);
     }
   } catch (error) {
-    console.error(`Error messaging Bluesky user ${user}: ${error.message}`);
+    logger.error(`Error messaging Bluesky user ${user}: ${error.message}`);
     throw error;
   }
 }

@@ -1,5 +1,6 @@
 import { TwitterApi } from 'twitter-api-v2';
 import dayjs from 'dayjs';
+import { logger } from '../utils/logger.mjs';
 
 let client;
 
@@ -14,9 +15,9 @@ export async function initialize() {
   // Verify credentials
   try {
     const me = await client.v2.me();
-    console.log(`X.com initialized as @${me.data.username}`);
+    logger.log(`X.com initialized as @${me.data.username}`);
   } catch (error) {
-    console.error('Failed to initialize X.com client:', error.message);
+    logger.error('Failed to initialize X.com client:', error.message);
     throw error;
   }
 }
@@ -52,7 +53,7 @@ export async function findPotentialUsers(searchTerms) {
         }
       }
     } catch (error) {
-      console.error(`Error searching X.com for term "${term}": ${error.message}`);
+      logger.error(`Error searching X.com for term "${term}": ${error.message}`);
     }
   }
   
@@ -61,7 +62,7 @@ export async function findPotentialUsers(searchTerms) {
 }
 
 export async function messageUser(username, message) {
-  console.log(`[${dayjs().format('HH:mm')}] Messaging X.com user: ${username}`);
+  logger.log(`[${dayjs().format('HH:mm')}] Messaging X.com user: ${username}`);
   
   try {
     // Note: Direct messaging requires elevated API access
@@ -76,15 +77,15 @@ export async function messageUser(username, message) {
     
     // Follow the user
     await client.v2.follow(user.data.id);
-    console.log(`Followed X.com user @${username}`);
+    logger.log(`Followed X.com user @${username}`);
     
     // Create a tweet mentioning the user
     const tweet = await client.v2.tweet(`@${username} ${message}`);
-    console.log(`\u2705 Messaged X.com user @${username} via mention`);
+    logger.log(`\u2705 Messaged X.com user @${username} via mention`);
     
     return tweet;
   } catch (error) {
-    console.error(`Error messaging X.com user ${username}: ${error.message}`);
+    logger.error(`Error messaging X.com user ${username}: ${error.message}`);
     throw error;
   }
 }

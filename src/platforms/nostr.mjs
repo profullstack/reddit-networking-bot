@@ -5,6 +5,9 @@ import * as nip19 from 'nostr-tools/nip19';
 import { SimplePool } from 'nostr-tools';
 import dayjs from 'dayjs';
 import puppeteer from 'puppeteer';
+import path from 'path';
+import fs from 'fs';
+import { logger } from '../utils/logger.mjs';
 
 let privateKey;
 let publicKey;
@@ -23,7 +26,7 @@ export async function initialize() {
   privateKey = process.env.NOSTR_PRIVATE_KEY;
   
   if (!privateKey) {
-    console.error('Nostr private key not found in environment variables');
+    logger.error('Nostr private key not found in environment variables');
     throw new Error('Nostr private key is required. Please set NOSTR_PRIVATE_KEY in your .env file');
   }
   
@@ -35,7 +38,7 @@ export async function initialize() {
         privateKey = decoded.data;
       }
     } catch (error) {
-      console.error('Error decoding nsec key:', error.message);
+      logger.error('Error decoding nsec key:', error.message);
     }
   }
   // Convert hex string to Uint8Array if needed
@@ -44,7 +47,7 @@ export async function initialize() {
   }
   
   publicKey = getPublicKey(privateKey);
-  console.log('Nostr initialized with public key:', publicKey);
+  logger.log('Nostr initialized with public key:', publicKey);
 }
 
 // Helper function to convert hex string to Uint8Array
@@ -57,7 +60,7 @@ function hexToBytes(hex) {
 }
 
 export async function findPotentialUsers(searchTerms) {
-  console.log('Searching for Nostr users interested in:', searchTerms);
+  logger.log('Searching for Nostr users interested in:', searchTerms);
   
   let browser;
   try {
@@ -66,7 +69,7 @@ export async function findPotentialUsers(searchTerms) {
     const encodedQuery = encodeURIComponent(searchQuery);
     const url = `https://primal.net/search/${encodedQuery}`;
     
-    console.log(`Launching browser to scrape Nostr search results from: ${url}`);
+    logger.log(`Launching browser to scrape Nostr search results from: ${url}`);
     
     // Launch a headless browser with more options for compatibility
     browser = await puppeteer.launch({
@@ -89,25 +92,39 @@ export async function findPotentialUsers(searchTerms) {
     // Set a user agent to appear more like a regular browser
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
     
-    console.log('Navigating to search URL...');
+    logger.log('Navigating to search URL...');
     // Navigate to the search URL with a longer timeout
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
     
     // Wait for the page to load content
-    console.log('Waiting for page content to load...');
+    logger.log('Waiting for page content to load...');
     await new Promise(resolve => setTimeout(resolve, 5000));
     
-    // Take a screenshot for debugging
-    await page.screenshot({ path: 'primal-search.png' });
-    console.log('Screenshot saved to primal-search.png');
+    // Ensure logs directory exists
+    const logsDir = path.resolve(process.cwd(), 'logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    
+    // Take a screenshot for debugging with timestamp
     
     // A more direct approach to find profile links on Primal.net
-    console.log('Extracting user profiles...');
+    const timestamp = dayjs().format('YYYY-MM-DD-HH-mm-ss');
+    const screenshotPath = path.join(logsDir, `primal-search-${timestamp}.png`);
+    await page.screenshot({ path: screenshotPath });
+    logger.log(`Screenshot saved to ${screenshotPath}`);
+    
+    logger.log('Extracting user profiles...');
     
     // Get page HTML for debugging
     const pageContent = await page.content();
-    console.log('Page HTML length:', pageContent.length);
-    console.log('Page HTML preview:', pageContent.substring(0, 500) + '...');
+    logger.log('Page HTML length:', pageContent.length);
+    logger.log('Page HTML preview:', pageContent.substring(0, 500) + '...');
+    
+    // Save full HTML to log file for debugging
+    const htmlLogPath = path.join(logsDir, `primal-search-html-${timestamp}.html`);
+    fs.writeFileSync(htmlLogPath, pageContent);
+    logger.log(`Full HTML saved to ${htmlLogPath}`);
     
     // Extract all profile links from the page
     const profileLinks = await page.evaluate(() => {
@@ -181,12 +198,12 @@ export async function findPotentialUsers(searchTerms) {
         });
     });
     
-    console.log(`Found ${profileLinks.length} potential profile links`);
-    console.log('Profile links found:', JSON.stringify(profileLinks, null, 2));
+    logger.log(`Found ${profileLinks.length} potential profile links`);
+    logger.log('Profile links found:', JSON.stringify(profileLinks, null, 2));
     
     // If we didn't find any profile links, try a more aggressive approach
     if (profileLinks.length === 0) {
-      console.log('No profile links found, trying alternative approach...');
+      logger.log('No profile links found, trying alternative approach...');
       
       // Try to extract any elements that might be user cards
       const userElements = await page.evaluate(() => {
@@ -235,7 +252,7 @@ export async function findPotentialUsers(searchTerms) {
         }).filter(item => item.name !== 'Unknown User' || item.profileId || item.hexPubkey || item.url);
       });
       
-      console.log(`Found ${userElements.length} potential user elements`);
+      logger.log(`Found ${userElements.length} potential user elements`);
       
       // Combine the results
       profileLinks.push(...userElements);
@@ -264,23 +281,23 @@ export async function findPotentialUsers(searchTerms) {
             pubkey = decoded.data;
           }
         } catch (error) {
-          console.error(`Error decoding npub ${npub}:`, error.message);
+          logger.error(`Error decoding npub ${npub}:`, error.message);
         }
       } else if (profile.profileId && profile.profileId.startsWith('nprofile')) {
         // Handle nprofile format used by Primal.net
         try {
-          console.log(`Attempting to decode nprofile: ${profile.profileId}`);
+          logger.log(`Attempting to decode nprofile: ${profile.profileId}`);
           const decoded = nip19.decode(profile.profileId);
-          console.log('Decoded nprofile:', JSON.stringify(decoded, null, 2));
+          logger.log('Decoded nprofile:', JSON.stringify(decoded, null, 2));
           
           if (decoded.type === 'nprofile' && decoded.data && decoded.data.pubkey) {
             pubkey = decoded.data.pubkey;
-            console.log(`Extracted pubkey from nprofile: ${pubkey}`);
+            logger.log(`Extracted pubkey from nprofile: ${pubkey}`);
             npub = nip19.npubEncode(pubkey);
-            console.log(`Generated npub: ${npub}`);
+            logger.log(`Generated npub: ${npub}`);
           }
         } catch (error) {
-          console.error(`Error decoding nprofile ${profile.profileId}:`, error.message);
+          logger.error(`Error decoding nprofile ${profile.profileId}:`, error.message);
         }
       } else if (profile.profileId && profile.profileId.match(/^[0-9a-f]{64}$/i)) {
         // This is a hex pubkey in the profileId field
@@ -288,7 +305,7 @@ export async function findPotentialUsers(searchTerms) {
         try {
           npub = nip19.npubEncode(pubkey);
         } catch (error) {
-          console.error(`Error encoding pubkey ${pubkey}:`, error.message);
+          logger.error(`Error encoding pubkey ${pubkey}:`, error.message);
         }
       } else if (profile.hexPubkey && profile.hexPubkey.length === 64) {
         // This is a hex pubkey
@@ -296,7 +313,7 @@ export async function findPotentialUsers(searchTerms) {
         try {
           npub = nip19.npubEncode(pubkey);
         } catch (error) {
-          console.error(`Error encoding pubkey ${pubkey}:`, error.message);
+          logger.error(`Error encoding pubkey ${pubkey}:`, error.message);
         }
       } else if (profile.profileId && profile.profileId.length === 64) {
         // This might be a hex pubkey
@@ -304,7 +321,7 @@ export async function findPotentialUsers(searchTerms) {
         try {
           npub = nip19.npubEncode(pubkey);
         } catch (error) {
-          console.error(`Error encoding pubkey ${pubkey}:`, error.message);
+          logger.error(`Error encoding pubkey ${pubkey}:`, error.message);
         }
       }
       
@@ -329,7 +346,7 @@ export async function findPotentialUsers(searchTerms) {
       const isRelevant = true;
       
       // For debugging
-      console.log('Processing profile:', {
+      logger.log('Processing profile:', {
         name: profile.name,
         profileId: profile.profileId,
         hexPubkey: profile.hexPubkey,
@@ -339,7 +356,7 @@ export async function findPotentialUsers(searchTerms) {
       });
       
       // For debugging - show relevance check results
-      console.log(`Profile relevance check for ${profile.name}: ${isRelevant}`);      
+      logger.log(`Profile relevance check for ${profile.name}: ${isRelevant}`);      
       
       // Only add if we have enough information
       // All profiles from a Primal.net search are considered relevant
@@ -355,16 +372,16 @@ export async function findPotentialUsers(searchTerms) {
       }
     }
     
-    console.log(`Found ${processedUsers.length} Nostr users matching search terms`);
+    logger.log(`Found ${processedUsers.length} Nostr users matching search terms`);
     return processedUsers;
   } catch (error) {
-    console.error(`Error searching for Nostr users: ${error.message}`);
+    logger.error(`Error searching for Nostr users: ${error.message}`);
     return [];
   } finally {
     // Make sure to close the browser
     if (browser) {
       await browser.close();
-      console.log('Browser closed');
+      logger.log('Browser closed');
     }
   }
 }
@@ -377,7 +394,7 @@ export async function messageUser(user, message) {
     throw new Error(`Invalid pubkey: ${JSON.stringify(pubkey)}. Expected a string.`);
   }
   
-  console.log(`[${dayjs().format('HH:mm')}] Messaging Nostr user: ${pubkey}`);
+  logger.log(`[${dayjs().format('HH:mm')}] Messaging Nostr user: ${pubkey}`);
   
   try {
     // Create encrypted direct message event
@@ -395,8 +412,8 @@ export async function messageUser(user, message) {
     event = finalizeEvent(event, privateKey);
     
     // Publish to relays
-    console.log(`\u2705 Created Nostr DM for user ${pubkey.substring(0, 8)}...`);
-    console.log(`Publishing message to ${RELAYS.length} relays...`);
+    logger.log(`\u2705 Created Nostr DM for user ${pubkey.substring(0, 8)}...`);
+    logger.log(`Publishing message to ${RELAYS.length} relays...`);
     
     // Use SimplePool from nostr-tools to handle relay connections
     const pool = new SimplePool();
@@ -407,9 +424,9 @@ export async function messageUser(user, message) {
       
       // Wait for at least one relay to confirm publication
       const pub = await Promise.any(pubs);
-      console.log(`\u2705 Message published successfully to ${pub}`);
+      logger.log(`\u2705 Message published successfully to ${pub}`);
     } catch (error) {
-      console.warn('\u26a0\ufe0f Failed to publish to any relays:', error.message);
+      logger.warn('\u26a0\ufe0f Failed to publish to any relays:', error.message);
     } finally {
       // Close all connections
       pool.close(RELAYS);
@@ -417,7 +434,7 @@ export async function messageUser(user, message) {
     
     return event;
   } catch (error) {
-    console.error(`Error messaging Nostr user ${pubkey}: ${error.message}`);
+    logger.error(`Error messaging Nostr user ${pubkey}: ${error.message}`);
     throw error;
   }
 }
