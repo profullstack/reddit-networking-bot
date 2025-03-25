@@ -126,79 +126,123 @@ export async function findPotentialUsers(searchTerms) {
     fs.writeFileSync(htmlLogPath, pageContent);
     logger.log(`Full HTML saved to ${htmlLogPath}`);
     
-    // Extract all profile links from the page
-    const profileLinks = await page.evaluate(() => {
-      // Get all links on the page
-      const links = Array.from(document.querySelectorAll('a[href]'));
-      
-      // Filter for profile links
-      return links
-        .filter(link => {
-          const href = link.getAttribute('href');
-          return href && (
-            href.includes('/p/') || 
-            href.includes('/profile/') || 
-            href.includes('/user/')
-          );
-        })
-        .map(link => {
-          const href = link.getAttribute('href');
-          let profileId = '';
-          
-          // Extract profile ID based on URL pattern
-          if (href.includes('/p/')) {
-            profileId = href.split('/p/')[1].split('/')[0].split('?')[0];
-          } else if (href.includes('/profile/')) {
-            profileId = href.split('/profile/')[1].split('/')[0].split('?')[0];
-          } else if (href.includes('/user/')) {
-            profileId = href.split('/user/')[1].split('/')[0].split('?')[0];
-          }
-          
-          // Get the closest text that might be a name
-          let name = '';
-          let bio = '';
-          
-          // Try to find name in the link or parent elements
-          const parentElement = link.parentElement;
-          if (parentElement) {
-            // Look for potential name elements
-            const nameElements = parentElement.querySelectorAll('h1, h2, h3, h4, strong, b, [class*="name"], [class*="user"]');
-            if (nameElements.length > 0) {
-              name = nameElements[0].textContent.trim();
+    // Function to extract profile links from the page
+    const extractProfileLinks = async () => {
+      return await page.evaluate(() => {
+        // Get all links on the page
+        const links = Array.from(document.querySelectorAll('a[href]'));
+        
+        // Filter for profile links
+        return links
+          .filter(link => {
+            const href = link.getAttribute('href');
+            return href && (
+              href.includes('/p/') || 
+              href.includes('/profile/') || 
+              href.includes('/user/')
+            );
+          })
+          .map(link => {
+            const href = link.getAttribute('href');
+            let profileId = '';
+            
+            // Extract profile ID based on URL pattern
+            if (href.includes('/p/')) {
+              profileId = href.split('/p/')[1].split('/')[0].split('?')[0];
+            } else if (href.includes('/profile/')) {
+              profileId = href.split('/profile/')[1].split('/')[0].split('?')[0];
+            } else if (href.includes('/user/')) {
+              profileId = href.split('/user/')[1].split('/')[0].split('?')[0];
             }
             
-            // Look for potential bio elements
-            const bioElements = parentElement.querySelectorAll('p, [class*="bio"], [class*="description"], [class*="content"]');
-            if (bioElements.length > 0) {
-              bio = bioElements[0].textContent.trim();
-              if (bio.length > 300) bio = bio.substring(0, 297) + '...';
+            // Get the closest text that might be a name
+            let name = '';
+            let bio = '';
+            
+            // Try to find name in the link or parent elements
+            const parentElement = link.parentElement;
+            if (parentElement) {
+              // Look for potential name elements
+              const nameElements = parentElement.querySelectorAll('h1, h2, h3, h4, strong, b, [class*="name"], [class*="user"]');
+              if (nameElements.length > 0) {
+                name = nameElements[0].textContent.trim();
+              }
+              
+              // Look for potential bio elements
+              const bioElements = parentElement.querySelectorAll('p, [class*="bio"], [class*="description"], [class*="content"]');
+              if (bioElements.length > 0) {
+                bio = bioElements[0].textContent.trim();
+                if (bio.length > 300) bio = bio.substring(0, 297) + '...';
+              }
             }
-          }
-          
-          // If we couldn't find a name, use link text as fallback
-          if (!name) {
-            name = link.textContent.trim();
-            if (name.length > 50) name = name.substring(0, 47) + '...';
-          }
-          
-          // Look for data-user attribute which often contains the hex pubkey
-          let hexPubkey = '';
-          const userDataElement = link.querySelector('[data-user]') || link.closest('[data-user]');
-          if (userDataElement) {
-            hexPubkey = userDataElement.getAttribute('data-user');
-          }
-          
-          return {
-            profileId,
-            name: name || 'Unknown User',
-            bio,
-            hexPubkey,
-            url: href.startsWith('http') ? href : `https://primal.net${href}`
-          };
-        });
-    });
+            
+            // If we couldn't find a name, use link text as fallback
+            if (!name) {
+              name = link.textContent.trim();
+              if (name.length > 50) name = name.substring(0, 47) + '...';
+            }
+            
+            // Look for data-user attribute which often contains the hex pubkey
+            let hexPubkey = '';
+            const userDataElement = link.querySelector('[data-user]') || link.closest('[data-user]');
+            if (userDataElement) {
+              hexPubkey = userDataElement.getAttribute('data-user');
+            }
+            
+            return {
+              profileId,
+              name: name || 'Unknown User',
+              bio,
+              hexPubkey,
+              url: href.startsWith('http') ? href : `https://primal.net${href}`
+            };
+          });
+      });
+    };
     
-    logger.log(`Found ${profileLinks.length} potential profile links`);
+    // Implement continuous scrolling to get more results
+    let allProfileLinks = [];
+    const targetProfileCount = 50;
+    const maxScrollAttempts = 10;
+    let scrollAttempts = 0;
+    
+    // Initial extraction
+    let profileLinks = await extractProfileLinks();
+    allProfileLinks = [...profileLinks];
+    logger.log(`Initially found ${profileLinks.length} potential profile links`);
+    
+    // Continue scrolling until we have enough profiles or reach max attempts
+    while (allProfileLinks.length < targetProfileCount && scrollAttempts < maxScrollAttempts) {
+      scrollAttempts++;
+      
+      // Scroll down to load more results
+      await page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+      
+      // Wait for new content to load
+      await page.waitForTimeout(2000);
+      
+      // Extract profiles again
+      profileLinks = await extractProfileLinks();
+      
+      // Add new unique profiles to our collection
+      const existingIds = new Set(allProfileLinks.map(p => p.profileId));
+      const newProfiles = profileLinks.filter(p => !existingIds.has(p.profileId));
+      
+      allProfileLinks = [...allProfileLinks, ...newProfiles];
+      
+      logger.log(`Scroll attempt ${scrollAttempts}: Found ${newProfiles.length} new profiles, total: ${allProfileLinks.length}`);
+      
+      // Take a screenshot after each scroll for debugging
+      const scrollTimestamp = dayjs().format('YYYY-MM-DD-HH-mm-ss');
+      const scrollScreenshotPath = path.join(logsDir, `primal-search-scroll${scrollAttempts}-${scrollTimestamp}.png`);
+      await page.screenshot({ path: scrollScreenshotPath });
+    }
+    
+    // Use the combined results from all scrolls
+    profileLinks = allProfileLinks;
+    logger.log(`Found ${profileLinks.length} potential profile links after ${scrollAttempts} scroll attempts`);
     logger.log('Profile links found:', JSON.stringify(profileLinks, null, 2));
     
     // If we didn't find any profile links, try a more aggressive approach
