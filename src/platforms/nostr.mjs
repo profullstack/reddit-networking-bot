@@ -224,7 +224,7 @@ export async function findPotentialUsers(searchTerms) {
     allProfileLinks = [...profileLinks];
     logger.log(`Initially found ${profileLinks.length} potential profile links`);
     
-    // Continue scrolling until we have enough profiles or reach max attempts
+    // Continue scrolling until we have enough profiles, reach max attempts, or find 0 new profiles
     while (allProfileLinks.length < targetProfileCount && scrollAttempts < maxScrollAttempts) {
       scrollAttempts++;
       
@@ -242,6 +242,12 @@ export async function findPotentialUsers(searchTerms) {
       // Add new unique profiles to our collection
       const existingIds = new Set(allProfileLinks.map(p => p.profileId));
       const newProfiles = profileLinks.filter(p => !existingIds.has(p.profileId));
+      
+      // Stop if we found 0 new profiles in this scroll attempt
+      if (newProfiles.length === 0) {
+        logger.log(`Scroll attempt ${scrollAttempts}: No new profiles found. Stopping infinite scroll.`);
+        break;
+      }
       
       allProfileLinks = [...allProfileLinks, ...newProfiles];
       
