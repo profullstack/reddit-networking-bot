@@ -27,12 +27,7 @@ const RELAYS = [
   'wss://nos.lol',
   'wss://nostr.mom',
   'wss://nostr.oxtr.dev',
-  
-  // Additional relays to try
-  'wss://relay.snort.social',
   'wss://nostr-pub.wellorder.net',
-  'wss://relay.current.fyi',
-  'wss://eden.nostr.land'
 ];
 
 export async function initialize() {
