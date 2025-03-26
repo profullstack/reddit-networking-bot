@@ -73,7 +73,17 @@ async function runPlatform(platformName) {
     const candidates = await platform.findPotentialUsers(config.searchTerms[platformName]);
     logger.log(`Found ${candidates.length} potential users on ${platformName}`);
     
-    const filtered = candidates.filter(user => !messaged.includes(user));
+    // Filter candidates based on platform-specific user identifiers
+    const filtered = candidates.filter(user => {
+      // For Nostr, we need to check the pubkey
+      if (platformName === 'nostr') {
+        const pubkey = typeof user === 'object' ? user.pubkey : user;
+        return !messaged.includes(pubkey);
+      }
+      // For other platforms, use the default comparison
+      return !messaged.includes(user);
+    });
+    
     logger.log(`${filtered.length} new candidates on ${platformName}`);
     
     if (filtered.length === 0) {
@@ -83,7 +93,15 @@ async function runPlatform(platformName) {
     
     const nextUser = filtered[0];
     await platform.messageUser(nextUser, config.platforms[platformName].message);
-    messaged.push(nextUser);
+    
+    // Store the appropriate identifier based on platform
+    if (platformName === 'nostr') {
+      const pubkey = typeof nextUser === 'object' ? nextUser.pubkey : nextUser;
+      messaged.push(pubkey);
+    } else {
+      messaged.push(nextUser);
+    }
+    
     await saveMessagedUsers(platformName, messaged);
   } catch (error) {
     logger.error(`Error running ${platformName} bot: ${error.message}`);
