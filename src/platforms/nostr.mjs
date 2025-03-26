@@ -8,6 +8,12 @@ import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import { logger } from '../utils/logger.mjs';
+import WebSocket from 'ws';
+
+// Add WebSocket to global scope for nostr-tools
+if (typeof global !== 'undefined' && !global.WebSocket) {
+  global.WebSocket = WebSocket;
+}
 
 let privateKey;
 let publicKey;
