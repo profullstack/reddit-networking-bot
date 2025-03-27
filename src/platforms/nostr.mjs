@@ -140,77 +140,142 @@ export async function findPotentialUsers(searchTerms) {
     fs.writeFileSync(htmlLogPath, pageContent);
     logger.log(`Full HTML saved to ${htmlLogPath}`);
     
-    // Function to extract profile links from the page
+    // Function to extract profile links from the page with enhanced detection
     const extractProfileLinks = async () => {
       return await page.evaluate(() => {
-        // Get all links on the page
-        const links = Array.from(document.querySelectorAll('a[href]'));
+        // More comprehensive approach to find profile elements
+        const results = [];
         
-        // Filter for profile links
-        return links
-          .filter(link => {
-            const href = link.getAttribute('href');
-            return href && (
-              href.includes('/p/') || 
-              href.includes('/profile/') || 
-              href.includes('/user/')
-            );
-          })
-          .map(link => {
-            const href = link.getAttribute('href');
-            let profileId = '';
-            
-            // Extract profile ID based on URL pattern
-            if (href.includes('/p/')) {
-              profileId = href.split('/p/')[1].split('/')[0].split('?')[0];
-            } else if (href.includes('/profile/')) {
-              profileId = href.split('/profile/')[1].split('/')[0].split('?')[0];
-            } else if (href.includes('/user/')) {
-              profileId = href.split('/user/')[1].split('/')[0].split('?')[0];
-            }
-            
-            // Get the closest text that might be a name
-            let name = '';
-            let bio = '';
-            
-            // Try to find name in the link or parent elements
-            const parentElement = link.parentElement;
-            if (parentElement) {
-              // Look for potential name elements
-              const nameElements = parentElement.querySelectorAll('h1, h2, h3, h4, strong, b, [class*="name"], [class*="user"]');
-              if (nameElements.length > 0) {
-                name = nameElements[0].textContent.trim();
-              }
+        // Method 1: Find all links that might be profile links
+        const links = Array.from(document.querySelectorAll('a[href]'));
+        const profileLinks = links.filter(link => {
+          const href = link.getAttribute('href');
+          return href && (
+            href.includes('/p/') || 
+            href.includes('/profile/') || 
+            href.includes('/user/')
+          );
+        });
+        
+        // Process profile links
+        profileLinks.forEach(link => {
+          const href = link.getAttribute('href');
+          let profileId = '';
+          
+          // Extract profile ID based on URL pattern
+          if (href.includes('/p/')) {
+            profileId = href.split('/p/')[1].split('/')[0].split('?')[0];
+          } else if (href.includes('/profile/')) {
+            profileId = href.split('/profile/')[1].split('/')[0].split('?')[0];
+          } else if (href.includes('/user/')) {
+            profileId = href.split('/user/')[1].split('/')[0].split('?')[0];
+          }
+          
+          // Get the closest text that might be a name
+          let name = '';
+          let bio = '';
+          
+          // Try to find name in the link or parent elements
+          // Look up to 3 levels up to find user card container
+          let container = link;
+          for (let i = 0; i < 3; i++) {
+            if (container.parentElement) {
+              container = container.parentElement;
               
-              // Look for potential bio elements
-              const bioElements = parentElement.querySelectorAll('p, [class*="bio"], [class*="description"], [class*="content"]');
-              if (bioElements.length > 0) {
-                bio = bioElements[0].textContent.trim();
-                if (bio.length > 300) bio = bio.substring(0, 297) + '...';
+              // Check if this looks like a user card
+              if (
+                container.className.includes('card') || 
+                container.className.includes('user') || 
+                container.className.includes('profile') || 
+                container.className.includes('author')
+              ) {
+                break;
               }
             }
-            
-            // If we couldn't find a name, use link text as fallback
-            if (!name) {
-              name = link.textContent.trim();
-              if (name.length > 50) name = name.substring(0, 47) + '...';
-            }
-            
-            // Look for data-user attribute which often contains the hex pubkey
-            let hexPubkey = '';
-            const userDataElement = link.querySelector('[data-user]') || link.closest('[data-user]');
-            if (userDataElement) {
-              hexPubkey = userDataElement.getAttribute('data-user');
-            }
-            
-            return {
-              profileId,
-              name: name || 'Unknown User',
-              bio,
-              hexPubkey,
-              url: href.startsWith('http') ? href : `https://primal.net${href}`
-            };
+          }
+          
+          // Look for potential name elements
+          const nameElements = container.querySelectorAll('h1, h2, h3, h4, strong, b, [class*="name"], [class*="user"]');
+          if (nameElements.length > 0) {
+            name = nameElements[0].textContent.trim();
+          }
+          
+          // Look for potential bio elements
+          const bioElements = container.querySelectorAll('p, [class*="bio"], [class*="description"], [class*="content"]');
+          if (bioElements.length > 0) {
+            bio = bioElements[0].textContent.trim();
+            if (bio.length > 300) bio = bio.substring(0, 297) + '...';
+          }
+          
+          // If we couldn't find a name, use link text as fallback
+          if (!name) {
+            name = link.textContent.trim();
+            if (name.length > 50) name = name.substring(0, 47) + '...';
+          }
+          
+          // Look for data-user attribute which often contains the hex pubkey
+          let hexPubkey = '';
+          const userDataElement = container.querySelector('[data-user]') || container.closest('[data-user]');
+          if (userDataElement) {
+            hexPubkey = userDataElement.getAttribute('data-user');
+          }
+          
+          results.push({
+            profileId,
+            name: name || 'Unknown User',
+            bio,
+            hexPubkey,
+            url: href.startsWith('http') ? href : `https://primal.net${href}`
           });
+        });
+        
+        // Method 2: Find user cards directly
+        const userCards = Array.from(document.querySelectorAll('[class*="card"], [class*="user"], [class*="profile"], [class*="author"]'));
+        userCards.forEach(card => {
+          // Skip if this card doesn't look like a user card
+          if (!card.textContent || card.textContent.trim().length < 2) return;
+          
+          // Find link in the card
+          const link = card.querySelector('a[href]');
+          if (!link) return;
+          
+          const href = link.getAttribute('href');
+          if (!href || (!href.includes('/p/') && !href.includes('/profile/') && !href.includes('/user/'))) return;
+          
+          let profileId = '';
+          if (href.includes('/p/')) {
+            profileId = href.split('/p/')[1].split('/')[0].split('?')[0];
+          } else if (href.includes('/profile/')) {
+            profileId = href.split('/profile/')[1].split('/')[0].split('?')[0];
+          } else if (href.includes('/user/')) {
+            profileId = href.split('/user/')[1].split('/')[0].split('?')[0];
+          }
+          
+          // Find name and bio
+          const nameElement = card.querySelector('h1, h2, h3, h4, strong, b, [class*="name"], [class*="user"]');
+          const bioElement = card.querySelector('p, [class*="bio"], [class*="description"], [class*="content"]');
+          
+          const name = nameElement ? nameElement.textContent.trim() : '';
+          let bio = bioElement ? bioElement.textContent.trim() : '';
+          if (bio.length > 300) bio = bio.substring(0, 297) + '...';
+          
+          // Find pubkey
+          let hexPubkey = '';
+          const userDataElement = card.querySelector('[data-user]');
+          if (userDataElement) {
+            hexPubkey = userDataElement.getAttribute('data-user');
+          }
+          
+          results.push({
+            profileId,
+            name: name || 'Unknown User',
+            bio,
+            hexPubkey,
+            url: href.startsWith('http') ? href : `https://primal.net${href}`
+          });
+        });
+        
+        return results;
       });
     };
     
@@ -220,10 +285,32 @@ export async function findPotentialUsers(searchTerms) {
     const maxScrollAttempts = 10;
     let scrollAttempts = 0;
     
+    // Create a more robust way to track unique profiles
+    const uniqueProfileTracker = new Map();
+    
+    // Helper function to add unique profiles
+    const addUniqueProfiles = (profiles) => {
+      let newCount = 0;
+      
+      profiles.forEach(profile => {
+        // Create a composite key using multiple fields to better identify unique profiles
+        // Use URL as primary identifier, then profileId, then hexPubkey, then name as fallback
+        const uniqueKey = profile.url || profile.profileId || profile.hexPubkey || profile.name;
+        
+        if (uniqueKey && !uniqueProfileTracker.has(uniqueKey)) {
+          uniqueProfileTracker.set(uniqueKey, profile);
+          allProfileLinks.push(profile);
+          newCount++;
+        }
+      });
+      
+      return newCount;
+    };
+    
     // Initial extraction
     let profileLinks = await extractProfileLinks();
-    allProfileLinks = [...profileLinks];
-    logger.log(`Initially found ${profileLinks.length} potential profile links`);
+    const initialCount = addUniqueProfiles(profileLinks);
+    logger.log(`Initially found ${initialCount} unique profile links out of ${profileLinks.length} total`);
     
     // Continue scrolling until we have enough profiles, reach max attempts, or find 0 new profiles
     while (allProfileLinks.length < targetProfileCount && scrollAttempts < maxScrollAttempts) {
@@ -241,18 +328,15 @@ export async function findPotentialUsers(searchTerms) {
       profileLinks = await extractProfileLinks();
       
       // Add new unique profiles to our collection
-      const existingIds = new Set(allProfileLinks.map(p => p.profileId));
-      const newProfiles = profileLinks.filter(p => !existingIds.has(p.profileId));
+      const newCount = addUniqueProfiles(profileLinks);
       
       // Stop if we found 0 new profiles in this scroll attempt
-      if (newProfiles.length === 0) {
+      if (newCount === 0) {
         logger.log(`Scroll attempt ${scrollAttempts}: No new profiles found. Stopping infinite scroll.`);
         break;
       }
       
-      allProfileLinks = [...allProfileLinks, ...newProfiles];
-      
-      logger.log(`Scroll attempt ${scrollAttempts}: Found ${newProfiles.length} new profiles, total: ${allProfileLinks.length}`);
+      logger.log(`Scroll attempt ${scrollAttempts}: Found ${newCount} new unique profiles, total: ${allProfileLinks.length}`);
       
       // Take a screenshot after each scroll for debugging
       const scrollTimestamp = dayjs().format('YYYY-MM-DD-HH-mm-ss');
@@ -260,77 +344,141 @@ export async function findPotentialUsers(searchTerms) {
       await page.screenshot({ path: scrollScreenshotPath });
     }
     
-    // Use the combined results from all scrolls
+    // Use the combined results from all scrolls - allProfileLinks now contains only unique profiles
     profileLinks = allProfileLinks;
-    logger.log(`Found ${profileLinks.length} potential profile links after ${scrollAttempts} scroll attempts`);
-    logger.log('Profile links found:', JSON.stringify(profileLinks, null, 2));
+    logger.log(`Found ${profileLinks.length} unique profile links after ${scrollAttempts} scroll attempts`);
     
-    // If we didn't find any profile links, try a more aggressive approach
-    if (profileLinks.length === 0) {
-      logger.log('No profile links found, trying alternative approach...');
+    // Log a sample of the profiles found for debugging (limit to 3 to avoid excessive logging)
+    const sampleProfiles = profileLinks.slice(0, 3);
+    logger.log('Sample profile links found:', JSON.stringify(sampleProfiles, null, 2));
+    
+    // Always try the alternative approach to find more profiles
+    logger.log('Trying additional search methods to find more profiles...');
+    
+    // Try a more aggressive approach with multiple search techniques
+    const userElements = await page.evaluate(() => {
+      const results = [];
       
-      // Try to extract any elements that might be user cards
-      const userElements = await page.evaluate(() => {
-        // Look for elements that might be user cards
-        const elements = Array.from(document.querySelectorAll('div[class*="card"], div[class*="user"], div[class*="profile"], div[class*="author"]'));
+      // Method 1: Look for elements that might be user cards
+      const elements = Array.from(document.querySelectorAll('div[class*="card"], div[class*="user"], div[class*="profile"], div[class*="author"], div[class*="result"], div[class*="item"]'));
+      
+      elements.forEach(element => {
+        // Try to find a link
+        const link = element.querySelector('a[href]');
+        const href = link ? link.getAttribute('href') : '';
         
-        return elements.map(element => {
-          // Try to find a link
-          const link = element.querySelector('a[href]');
-          const href = link ? link.getAttribute('href') : '';
-          
-          // Try to find name and bio
-          const nameElement = element.querySelector('h1, h2, h3, h4, strong, b, [class*="name"], [class*="user"]');
-          const bioElement = element.querySelector('p, [class*="bio"], [class*="description"], [class*="content"]');
-          
-          const name = nameElement ? nameElement.textContent.trim() : '';
-          let bio = bioElement ? bioElement.textContent.trim() : '';
-          if (bio.length > 300) bio = bio.substring(0, 297) + '...';
-          
-          // Try to find a pubkey
-          let hexPubkey = '';
-          const userDataElement = element.querySelector('[data-user]');
-          if (userDataElement) {
-            hexPubkey = userDataElement.getAttribute('data-user');
+        // Skip if not a profile link
+        if (!href || (!href.includes('/p/') && !href.includes('/profile/') && !href.includes('/user/'))) return;
+        
+        // Try to find name and bio
+        const nameElement = element.querySelector('h1, h2, h3, h4, strong, b, [class*="name"], [class*="user"]');
+        const bioElement = element.querySelector('p, [class*="bio"], [class*="description"], [class*="content"]');
+        
+        const name = nameElement ? nameElement.textContent.trim() : '';
+        let bio = bioElement ? bioElement.textContent.trim() : '';
+        if (bio.length > 300) bio = bio.substring(0, 297) + '...';
+        
+        // Try to find a pubkey
+        let hexPubkey = '';
+        const userDataElement = element.querySelector('[data-user]');
+        if (userDataElement) {
+          hexPubkey = userDataElement.getAttribute('data-user');
+        }
+        
+        // Extract profile ID from href if available
+        let profileId = '';
+        if (href) {
+          if (href.includes('/p/')) {
+            profileId = href.split('/p/')[1].split('/')[0].split('?')[0];
+          } else if (href.includes('/profile/')) {
+            profileId = href.split('/profile/')[1].split('/')[0].split('?')[0];
+          } else if (href.includes('/user/')) {
+            profileId = href.split('/user/')[1].split('/')[0].split('?')[0];
           }
-          
-          // Extract profile ID from href if available
-          let profileId = '';
-          if (href) {
-            if (href.includes('/p/')) {
-              profileId = href.split('/p/')[1].split('/')[0].split('?')[0];
-            } else if (href.includes('/profile/')) {
-              profileId = href.split('/profile/')[1].split('/')[0].split('?')[0];
-            } else if (href.includes('/user/')) {
-              profileId = href.split('/user/')[1].split('/')[0].split('?')[0];
-            }
-          }
-          
-          return {
-            profileId,
-            name: name || 'Unknown User',
-            bio,
-            hexPubkey,
-            url: href ? (href.startsWith('http') ? href : `https://primal.net${href}`) : ''
-          };
-        }).filter(item => item.name !== 'Unknown User' || item.profileId || item.hexPubkey || item.url);
+        }
+        
+        results.push({
+          profileId,
+          name: name || 'Unknown User',
+          bio,
+          hexPubkey,
+          url: href ? (href.startsWith('http') ? href : `https://primal.net${href}`) : ''
+        });
       });
       
-      logger.log(`Found ${userElements.length} potential user elements`);
+      // Method 2: Look for any elements with data-user attribute (contains pubkey)
+      const dataUserElements = Array.from(document.querySelectorAll('[data-user]'));
+      dataUserElements.forEach(element => {
+        const hexPubkey = element.getAttribute('data-user');
+        if (!hexPubkey) return;
+        
+        // Try to find a parent that looks like a user card
+        let container = element;
+        for (let i = 0; i < 5; i++) {
+          if (!container.parentElement) break;
+          container = container.parentElement;
+          if (
+            container.className.includes('card') || 
+            container.className.includes('user') || 
+            container.className.includes('profile') || 
+            container.className.includes('author') || 
+            container.className.includes('result') || 
+            container.className.includes('item')
+          ) {
+            break;
+          }
+        }
+        
+        // Try to find a link
+        const link = container.querySelector('a[href]');
+        const href = link ? link.getAttribute('href') : '';
+        
+        // Try to find name and bio
+        const nameElement = container.querySelector('h1, h2, h3, h4, strong, b, [class*="name"], [class*="user"]');
+        const bioElement = container.querySelector('p, [class*="bio"], [class*="description"], [class*="content"]');
+        
+        const name = nameElement ? nameElement.textContent.trim() : '';
+        let bio = bioElement ? bioElement.textContent.trim() : '';
+        if (bio.length > 300) bio = bio.substring(0, 297) + '...';
+        
+        // Extract profile ID from href if available
+        let profileId = '';
+        if (href) {
+          if (href.includes('/p/')) {
+            profileId = href.split('/p/')[1].split('/')[0].split('?')[0];
+          } else if (href.includes('/profile/')) {
+            profileId = href.split('/profile/')[1].split('/')[0].split('?')[0];
+          } else if (href.includes('/user/')) {
+            profileId = href.split('/user/')[1].split('/')[0].split('?')[0];
+          }
+        }
+        
+        results.push({
+          profileId,
+          name: name || 'Unknown User',
+          bio,
+          hexPubkey,
+          url: href ? (href.startsWith('http') ? href : `https://primal.net${href}`) : `https://primal.net/p/${hexPubkey}`
+        });
+      });
       
-      // Combine the results
-      profileLinks.push(...userElements);
-    }
+      return results.filter(item => item.profileId || item.hexPubkey || item.url);
+    });
+    
+    logger.log(`Found ${userElements.length} potential user elements with alternative methods`);
+    
+    // Add unique profiles from the alternative approach
+    const newCount = addUniqueProfiles(userElements);
+    logger.log(`Found ${newCount} new unique profiles from alternative approach, total: ${allProfileLinks.length}`);
+    
+    // Update profileLinks to use our unique profiles collection
+    profileLinks = allProfileLinks;
     
     // Process the extracted profiles
     const processedUsers = [];
-    const processedIds = new Set(); // To avoid duplicates
+    // We don't need processedIds here anymore since we've already de-duplicated using uniqueProfileTracker
     
     for (const profile of profileLinks) {
-      // Skip if we've already processed this profile
-      const uniqueId = profile.hexPubkey || profile.profileId || profile.url;
-      if (processedIds.has(uniqueId)) continue;
-      processedIds.add(uniqueId);
       
       let npub = '';
       let pubkey = '';
