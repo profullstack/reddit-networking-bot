@@ -91,24 +91,16 @@ async function runPlatform(platformName) {
       return;
     }
     
-    // Message all filtered users instead of just the first one
-    for (const user of filtered) {
-      try {
-        await platform.messageUser(user, config.platforms[platformName].message);
-        
-        // Store the appropriate identifier based on platform
-        if (platformName === 'nostr') {
-          const pubkey = typeof user === 'object' ? user.pubkey : user;
-          messaged.push(pubkey);
-        } else {
-          messaged.push(user);
-        }
-        
-        // Add a small delay between messages to avoid rate limiting
-        await wait(1000);
-      } catch (error) {
-        logger.error(`Error messaging user on ${platformName}: ${error.message}`);
-      }
+    // Message only one user per platform per run
+    const nextUser = filtered[0];
+    await platform.messageUser(nextUser, config.platforms[platformName].message);
+    
+    // Store the appropriate identifier based on platform
+    if (platformName === 'nostr') {
+      const pubkey = typeof nextUser === 'object' ? nextUser.pubkey : nextUser;
+      messaged.push(pubkey);
+    } else {
+      messaged.push(nextUser);
     }
     
     await saveMessagedUsers(platformName, messaged);
