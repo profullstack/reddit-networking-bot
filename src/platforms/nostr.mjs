@@ -389,26 +389,6 @@ export async function findPotentialUsers(searchTerms) {
         }
       }
       
-      // Check if this profile is relevant to the search
-      const searchTermsArray = Array.isArray(searchTerms) ? searchTerms : [searchTerms];
-      
-      // For searches on Primal.net, consider all results relevant since the site already filtered them
-      // But still check for exact matches in name/bio for better ranking
-      const isExactMatch = searchTermsArray.some(term => {
-        if (!term) return false;
-        const lowerTerm = term.toLowerCase();
-        return (
-          (profile.name && profile.name.toLowerCase().includes(lowerTerm)) || 
-          (profile.bio && profile.bio.toLowerCase().includes(lowerTerm)) || 
-          (profile.profileId && profile.profileId.toLowerCase().includes(lowerTerm)) || 
-          (pubkey && pubkey.toLowerCase().includes(lowerTerm)) || 
-          (npub && npub.toLowerCase().includes(lowerTerm))
-        );
-      });
-      
-      // Consider all results from Primal.net search as relevant
-      const isRelevant = true;
-      
       // For debugging
       logger.log('Processing profile:', {
         name: profile.name,
@@ -419,11 +399,8 @@ export async function findPotentialUsers(searchTerms) {
         url: profile.url
       });
       
-      // For debugging - show relevance check results
-      logger.log(`Profile relevance check for ${profile.name}: ${isRelevant}`);      
-      
       // Only add if we have enough information
-      // All profiles from a Primal.net search are considered relevant
+      // All profiles from a Primal.net search are considered relevant since the site already filtered them
       if (pubkey || profile.url) {
         processedUsers.push({
           name: profile.name || 'Unknown User',
