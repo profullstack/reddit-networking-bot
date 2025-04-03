@@ -8,8 +8,9 @@ A bot that finds users interested in business networking across multiple platfor
    - Bluesky: Use your Bluesky account credentials
    - Nostr: Generate a private key for your Nostr account
    - X.com: Create a Twitter developer account and app at https://developer.twitter.com
+   - OpenAI: Create an OpenAI developer account and app at https://platform.openai.com/apps
 2. Copy `sample.env` to `.env` and fill in your credentials for each platform
-3. Configure messages and search terms in `config.json`
+3. Configure fallback messages and search terms in `config.json`
 4. Run:
 ```bash
 pnpm install
@@ -20,7 +21,7 @@ pnpm start
 - The bot persists messaged users in platform-specific files (e.g., `messaged-reddit.json`, `messaged-bluesky.json`)
 - It runs in a loop, sending one message per platform every hour to avoid detection
 - You can enable/disable specific platforms in `config.json`
-- Each platform has its own message template and search terms
+- Each platform has its own message template (AI) and search terms
 
 ## Platform-Specific Notes
 

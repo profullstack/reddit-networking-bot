@@ -1,6 +1,7 @@
 import { BskyAgent } from '@atproto/api';
 import dayjs from 'dayjs';
 import { logger } from '../utils/logger.mjs';
+import { generatePersonalizedMessage } from '../services/ai.mjs';
 
 let agent;
 
@@ -54,10 +55,18 @@ export async function messageUser(user, message) {
     
     if (posts.data.feed.length > 0) {
       const replyTo = posts.data.feed[0];
+
+      const userContext = {
+        platform: 'bsky',
+        username: user
+      };
+  
+      const personalizedMessage = await generatePersonalizedMessage(userContext)
+        .catch(() => message); // Fallback to default message if AI fails
       
       // Reply to their post
       await agent.post({
-        text: `@${user} ${message}`,
+        text: `@${user} ${personalizedMessage}`,
         reply: {
           root: {
             uri: replyTo.post.uri,

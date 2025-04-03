@@ -1,6 +1,7 @@
 import snoowrap from 'snoowrap';
 import dayjs from 'dayjs';
 import { logger } from '../utils/logger.mjs';
+import { generatePersonalizedMessage } from '../services/ai.mjs';
 
 let r;
 
@@ -31,10 +32,18 @@ export async function findPotentialUsers(searchTerms) {
 export async function messageUser(user, message) {
   logger.log(`[${dayjs().format('HH:mm')}] Messaging Reddit user: ${user}`);
   try {
+    const userContext = {
+      platform: 'reddit',
+      username: user
+    };
+
+    const personalizedMessage = await generatePersonalizedMessage(userContext)
+      .catch(() => message); // Fallback to default message if AI fails
+
     await r.composeMessage({
       to: user,
       subject: 'Tech Founder Networking Group',
-      text: message
+      text: personalizedMessage
     });
     logger.log(`✅ Messaged Reddit user ${user}`);
   } catch (error) {
