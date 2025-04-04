@@ -15,9 +15,8 @@ export async function makeProfullstackAiCall(prompt, system_prompt) {
                     }
                 ],
                 stream: false,
-                format: 'json',
                 options: {
-                    temperature: 0.3,
+                    temperature: 0.6,
                     top_p: 0.9,
                     stop: null
                 }
@@ -36,37 +35,10 @@ export async function makeProfullstackAiCall(prompt, system_prompt) {
             throw new Error('Invalid AI response format');
         }
 
-        try {
-            // If content is already an object, return it
-            if (typeof data.message.content === 'object') {
-                return data.message.content;
-            }
-
-            // Try to parse the content as JSON, handling potential errors
-            const contentStr = data.message.content.trim();
-            try {
-                return JSON.parse(contentStr);
-            } catch (parseError) {
-                // If there's a parse error, try to clean the string
-                // Sometimes the AI might include markdown backticks or extra whitespace
-                const cleanContent = contentStr
-                    .replace(/^```json\s*/, '') // Remove leading ```json
-                    .replace(/\s*```$/, '') // Remove trailing ```
-                    .trim();
-
-                return JSON.parse(cleanContent);
-            }
-        } catch (parseError) {
-            console.error('Failed to parse AI response content:', data.message.content);
-            console.error('Parse error:', parseError);
-            // Return a default response instead of throwing
-            return {
-                summary: 'Error parsing AI response. Please review the events manually.'
-            };
-        }
+        // Directly return the content as an object
+        return data.message.content;
     } catch (error) {
         console.error('AI call failed:', error);
-        // Return a default response instead of throwing
         return {
             summary: `AI service error: ${error.message}. Please review the events manually.`
         };

@@ -14,13 +14,24 @@ import { makeAICall } from './llm.mjs';
  */
 export async function generatePersonalizedMessage(userContext) {
   try {
-    const system_prompt = `You are doing biz dev outreach on behalf of our company, use a professional but friendly tone to do a cold outreach to someone who think might be interested in our product.`;
+    const system_prompt = `You are conducting business development outreach on behalf of our company. Use a formal yet friendly tone to craft a cold outreach message tailored to someone who may be interested in our product. Ensure the message feels personalized and relevant to their interests while remaining professional.`;
 
-    const prompt = `Please rewrite this promotional outreach message to be less spammy and more targetted towards to user: ${userContext.seedPrompt}, ${userContext.username} ${userContext.subFound} Please generate a personalized networking invitation for a user on ${userContext.platform}. Their username is ${userContext.username}`
+    const prompt = `Rewrite the following outreach message to sound less spammy and more personalized${
+      userContext.username ? ` for ${userContext.username}` : ""
+    }${
+      userContext.seedPrompt ? `, using this idea: "${userContext.seedPrompt}"` : ""
+    }${
+      userContext.subFound ? `, referencing their activity in "${userContext.subFound}"` : ""
+    }${
+      userContext.platform ? `, for the platform ${userContext.platform}` : ""
+    }.
+    
+    Only return the final outreach message. Do not explain anything. Do not include any phrases like "Here's your message" or "This message is...". Do not use emojis or placeholders like [name] or [subreddit].`;
 
-    const response = await makeAICall(system_prompt, prompt)
+    const response = await makeAICall(system_prompt, prompt, 'profullstack');
 
-    const message = response.message.content.trim();
+    const message = response.trim();
+
     logger.log(`Generated personalized message for ${userContext.username} on ${userContext.platform}`);
 
     return message;

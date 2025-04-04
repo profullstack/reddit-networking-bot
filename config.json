@@ -5,11 +5,11 @@
       "message": "Hey! I saw you're interested in networking — I help run a tech founder networking group, would you like to join?"
     },
     "bluesky": {
-      "enabled": true,
+      "enabled": false,
       "message": "Hey! I noticed you're interested in networking — I help run a tech founder networking group, would you like to join?"
     },
     "nostr": {
-      "enabled": true,
+      "enabled": false,
       "message": "Hey! I saw your posts about networking — I help run a tech founder networking group, would you like to join?"
     },
     "x": {

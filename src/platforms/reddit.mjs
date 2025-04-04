@@ -41,11 +41,14 @@ export async function messageUser(user, message) {
     const personalizedMessage = await generatePersonalizedMessage(userContext)
       .catch(() => message); // Fallback to default message if AI fails
 
+      console.log(personalizedMessage)
+
     await r.composeMessage({
       to: user,
       subject: 'Tech Founder Networking Group',
       text: personalizedMessage
     });
+
     logger.log(`✅ Messaged Reddit user ${user}`);
   } catch (error) {
     logger.error(`Error messaging Reddit user ${user}: ${error.message}`);
