@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { logger } from '../utils/logger.mjs';
-
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+import { makeAICall } from './llm.mjs';
 
 /**
  * Generate a personalized message for a user based on their context
@@ -15,31 +14,15 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
  */
 export async function generatePersonalizedMessage(userContext) {
   try {
-    const prompt = {
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a friendly networking assistant helping to connect tech founders. Generate a personalized message to invite someone to join a tech founder networking group. Keep the message concise, friendly, and relevant to their interests.'
-        },
-        {
-          role: 'user',
-          content: `Please generate a personalized networking invitation for a user on ${userContext.platform}. Their username is ${userContext.username}.`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 150
-    };
+    const system_prompt = `You are doing biz dev outreach on behalf of our company, use a professional but friendly tone to do a cold outreach to someone who think might be interested in our product.`;
 
-    const response = await axios.post(OPENAI_API_URL, prompt, {
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const prompt = `Please rewrite this promotional outreach message to be less spammy and more targetted towards to user: ${userContext.seedPrompt}, ${userContext.username} ${userContext.subFound} Please generate a personalized networking invitation for a user on ${userContext.platform}. Their username is ${userContext.username}`
 
-    const message = response.data.choices[0].message.content.trim();
+    const response = await makeAICall(system_prompt, prompt)
+
+    const message = response.message.content.trim();
     logger.log(`Generated personalized message for ${userContext.username} on ${userContext.platform}`);
+
     return message;
   } catch (error) {
     logger.error(`Error generating personalized message: ${error.message}`);

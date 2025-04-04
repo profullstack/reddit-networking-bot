@@ -34,7 +34,8 @@ export async function messageUser(user, message) {
   try {
     const userContext = {
       platform: 'reddit',
-      username: user
+      username: user,
+      seedPrompt: message
     };
 
     const personalizedMessage = await generatePersonalizedMessage(userContext)
